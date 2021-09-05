@@ -3,64 +3,83 @@ import telegram
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+import time
 
 
 BASE_DIR = Path(__file__).resolve().parent
-load_dotenv(os.path.join(BASE_DIR, '.env'))
-
-TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
-CHAT_ID = os.getenv('CHAT_ID')
-
-DVMN_TOKEN = os.getenv('DVMN_TOKEN')
 DVMN_URL = 'https://dvmn.org'
 DVMN_API_URL = 'https://dvmn.org/api/long_polling/'
-DVMN_HEADERS = {'Authorization': 'Token {}'.format(DVMN_TOKEN)}
 
-timestamp = ''
-params = {}
-timeout = 15
+RECONNECT_TIMEOUT = 20
+API_TIMEOUT = 15
 
 
 def fetch_attempt(api_url, headers, params, timeout):
-    try:
-        response = requests.get(
-            DVMN_API_URL,
-            headers=DVMN_HEADERS,
-            params=params,
-            timeout=timeout
-            )
-        return response.json()
-    except requests.exceptions.ReadTimeout:
-        return
-    except requests.exceptions.ConnectionError:
-        return
+
+    response = requests.get(
+        api_url,
+        headers=headers,
+        params=params,
+        timeout=timeout
+        )
+    response.raise_for_status()
+    return response.json()
+
+
+def main():
+    load_dotenv(os.path.join(BASE_DIR, '.env'))
+    DVMN_TOKEN = os.getenv('DVMN_TOKEN')
+    TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+    CHAT_ID = os.getenv('CHAT_ID')
+    dvmn_headers = {'Authorization': 'Token {}'.format(DVMN_TOKEN)}
+
+    bot = telegram.Bot(token=TELEGRAM_TOKEN)
+
+    params = {}
+
+    while True:
+        try:
+            attempt = fetch_attempt(
+                DVMN_API_URL,
+                dvmn_headers,
+                params,
+                API_TIMEOUT
+                )
+        except requests.exceptions.ReadTimeout:
+            continue
+        except requests.exceptions.ConnectionError:
+            time.sleep(RECONNECT_TIMEOUT)
+            continue
+        except requests.exceptions.HTTPError:
+            time.sleep(RECONNECT_TIMEOUT)
+            continue
+
+        if attempt['status'] == 'found':
+            params['timestamp'] = attempt['last_attempt_timestamp']
+        else:
+            params['timestamp'] = attempt['timestamp_to_request']
+
+        for element in attempt['new_attempts']:
+            for key, value in element.items():
+                if key == 'lesson_title':
+                    lesson_title = value
+                elif key == 'lesson_url':
+                    lesson_url = value
+                elif key == 'is_negative':
+                    is_negative = value
+
+        attempt_result = (
+            "К сожалению, в работе нашлись ошибки." if is_negative
+            else "Преподавателю все понравилось, \
+                можно приступать к следующему уроку."
+                )
+        message = f"""\
+            У вас проверили работу ["{lesson_title}".]({DVMN_URL}{lesson_url})
+            {attempt_result}
+            """
+
+        bot.send_message(text=message, chat_id=CHAT_ID, parse_mode='Markdown')
 
 
 if __name__ == "__main__":
-    bot = telegram.Bot(token=TELEGRAM_TOKEN)
-    counter = 1
-    while True:
-
-        attempt = fetch_attempt(DVMN_API_URL, DVMN_HEADERS, params, timeout)
-
-        if not attempt:
-            continue
-
-        params['timestamp'] = attempt['last_attempt_timestamp']
-
-        is_negative = attempt['new_attempts'][0]['is_negative']
-        lesson_title = attempt['new_attempts'][0]['lesson_title']
-        lesson_url = attempt['new_attempts'][0]['lesson_url']
-
-        attempt_result = (
-            "К сожалению, в работе нашлись ошибки."
-            if is_negative else
-            "Преподавателю всё понравилось, \
-                можно приступать к следующему уроку!"
-            )
-
-        message = f'У вас проверили работу \
-            ["{lesson_title}".]({DVMN_URL}{lesson_url})\
-                \n\n{attempt_result}'
-
-        bot.send_message(text=message, chat_id=CHAT_ID, parse_mode='Markdown')
+    main()
