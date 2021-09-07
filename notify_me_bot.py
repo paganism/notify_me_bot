@@ -56,29 +56,26 @@ def main():
 
         if attempt['status'] == 'found':
             params['timestamp'] = attempt['last_attempt_timestamp']
+
+            last_attempt = attempt['new_attempts'][0]
+            is_negative = last_attempt['is_negative']
+            lesson_title = last_attempt['lesson_title']
+            lesson_url = last_attempt['lesson_url']
+
+            attempt_result = (
+                "К сожалению, в работе нашлись ошибки." if is_negative
+                else "Преподавателю все понравилось, \
+                    можно приступать к следующему уроку."
+                    )
+            message = f"""\
+                У вас проверили работу ["{lesson_title}".]({DVMN_URL}{lesson_url})
+                {attempt_result}
+                """
+
+            bot.send_message(text=message, chat_id=CHAT_ID, parse_mode='Markdown')
+
         else:
             params['timestamp'] = attempt['timestamp_to_request']
-
-        for element in attempt['new_attempts']:
-            for key, value in element.items():
-                if key == 'lesson_title':
-                    lesson_title = value
-                elif key == 'lesson_url':
-                    lesson_url = value
-                elif key == 'is_negative':
-                    is_negative = value
-
-        attempt_result = (
-            "К сожалению, в работе нашлись ошибки." if is_negative
-            else "Преподавателю все понравилось, \
-                можно приступать к следующему уроку."
-                )
-        message = f"""\
-            У вас проверили работу ["{lesson_title}".]({DVMN_URL}{lesson_url})
-            {attempt_result}
-            """
-
-        bot.send_message(text=message, chat_id=CHAT_ID, parse_mode='Markdown')
 
 
 if __name__ == "__main__":
