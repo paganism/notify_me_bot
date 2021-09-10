@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 import time
+import logging
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -27,6 +28,7 @@ def fetch_attempt(api_url, headers, params, timeout):
 
 
 def main():
+    logging.info('Bot started')
     load_dotenv(os.path.join(BASE_DIR, '.env'))
     DVMN_TOKEN = os.getenv('DVMN_TOKEN')
     TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
