@@ -15,6 +15,18 @@ RECONNECT_TIMEOUT = 20
 API_TIMEOUT = 15
 
 
+class BotLogHandler(logging.Handler):
+
+    def __init__(self, bot, chat_id):
+        super().__init__()
+        self.bot = bot
+        self.chat_id = chat_id
+
+    def emit(self, record):
+        log_entry = self.format(record)
+        self.bot.send_message(text=log_entry, chat_id=self.chat_id)
+
+
 def fetch_attempt(api_url, headers, params, timeout):
 
     response = requests.get(
@@ -28,7 +40,7 @@ def fetch_attempt(api_url, headers, params, timeout):
 
 
 def main():
-    logging.info('Bot started')
+
     load_dotenv(os.path.join(BASE_DIR, '.env'))
     DVMN_TOKEN = os.getenv('DVMN_TOKEN')
     TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
@@ -36,6 +48,14 @@ def main():
     dvmn_headers = {'Authorization': 'Token {}'.format(DVMN_TOKEN)}
 
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
+
+    log = logging.getLogger(__name__)
+    log.setLevel(logging.DEBUG)
+    handler = BotLogHandler(bot, CHAT_ID)
+    handler.setLevel(logging.DEBUG)
+    log.addHandler(handler)
+
+    log.info('Бот запущен')
 
     params = {}
 
@@ -52,7 +72,8 @@ def main():
         except requests.exceptions.ConnectionError:
             time.sleep(RECONNECT_TIMEOUT)
             continue
-        except requests.exceptions.HTTPError:
+        except requests.exceptions.HTTPError as err:
+            log.error(f'Возникла ошибка в работе бота: {str(err)}')
             time.sleep(RECONNECT_TIMEOUT)
             continue
 
@@ -70,11 +91,16 @@ def main():
                     можно приступать к следующему уроку."
                     )
             message = f"""\
-                У вас проверили работу ["{lesson_title}".]({DVMN_URL}{lesson_url})
+                У вас проверили работу \
+                    ["{lesson_title}".]({DVMN_URL}{lesson_url})
                 {attempt_result}
                 """
 
-            bot.send_message(text=message, chat_id=CHAT_ID, parse_mode='Markdown')
+            bot.send_message(
+                text=message,
+                chat_id=CHAT_ID,
+                parse_mode='Markdown'
+            )
 
         else:
             params['timestamp'] = attempt['timestamp_to_request']
