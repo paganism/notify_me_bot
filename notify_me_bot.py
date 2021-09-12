@@ -14,6 +14,8 @@ DVMN_API_URL = 'https://dvmn.org/api/long_polling/'
 RECONNECT_TIMEOUT = 20
 API_TIMEOUT = 15
 
+log = logging.getLogger(__name__)
+
 
 class BotLogHandler(logging.Handler):
 
@@ -49,7 +51,6 @@ def main():
 
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
 
-    log = logging.getLogger(__name__)
     log.setLevel(logging.DEBUG)
     handler = BotLogHandler(bot, CHAT_ID)
     handler.setLevel(logging.DEBUG)
